@@ -1,0 +1,567 @@
+---
+title: "Stroke Prediction Using Machine Learning"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    theme: journal
+    toc: true
+    number_sections: true
+author: "Temoor Tayyab"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+<br>
+
+**About Data Analysis Report**
+
+This RMarkdown file contains the report of the data analysis done for
+the project on building and deploying a stroke prediction model in R. It
+contains analysis such as data exploration, summary statistics and
+building the prediction models. The final report was completed on
+`r date()`.
+<br>
+<br>
+
+**Data Description:**
+
+According to the World Health Organization (WHO) stroke is the 2nd
+leading cause of death globally, responsible for approximately 11% of
+total deaths.
+
+This data set is used to predict whether a patient is likely to get
+stroke based on the (demographic input parameters such as gender, age,
+residence, etc.) and health-related parameters (i.e. hypertension,
+smoking status, glucose levels, etc.) Each row in the data provides
+relevant information about the patient.
+<br>
+<br>
+
+# Setup and Data Cleaning
+
+
+## Loading libraries
+<br>
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(remotes)
+library(fastDummies)
+library(caret)
+library(VIM)
+library(ggplot2)
+library(ROSE) 
+library(lattice)
+library(randomForest)
+library(pROC)
+```
+
+
+## Loading Data
+<br>
+
+```{r}
+strokedata<-read.csv("./strokedata.csv")
+
+```
+
+
+## Data Description and Exploration
+
+<br>
+```{r}
+names(strokedata)
+head(strokedata)
+summary(strokedata) 
+```
+
+<br>
+
+There are 5110 observations and 12 variables in the dataset. Some
+variables need to converted to the appropriate data type. Smoking
+variable also has unknowns which could be changed into NAs for R to
+detect. There is also some missingness in the BMI and smoking status variables.
+
+
+## Data Type Conversion
+<br>
+
+```{r}
+#Converting characters to factors
+strokedata$gender <- factor(strokedata$gender)
+strokedata$ever_married <- factor(strokedata$ever_married)
+strokedata$work_type <- factor(strokedata$work_type)
+strokedata$Residence_type <- factor(strokedata$Residence_type)
+strokedata$smoking_status <- factor(strokedata$smoking_status)
+strokedata$stroke <- factor(strokedata$stroke)
+
+#Converting BMI to a numeric data type
+#This code automatically codes any N/A in BMI into NA
+strokedata$bmi <- as.numeric(strokedata$bmi)
+
+#converting smoking_status unknown category to NA and removing the unknown 
+#category as it is no longer needed
+strokedata$smoking_status[strokedata$smoking_status == "Unknown"] <- NA
+strokedata$smoking_status <- droplevels(strokedata$smoking_status) 
+
+#ID is not needed
+#dropping id
+strokedata <- strokedata %>%
+  select(-id)
+```
+
+<br>
+
+## Examining Missingness
+Note from earlier that there was some missingness in the data. Let's
+delve into this.
+
+<br>
+
+```{r}
+aggr_plot <- aggr(strokedata, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(data), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+```
+<br>
+
+~30% of data in smoking status is missing. Should drop the entire
+variable so as not to lose data on other variables. Single imputations could also
+bring their own biases but for future reference, consider multiple imputations
+
+```{r}
+
+```
+
+<br>
+```{r, eval=FALSE}
+#Visually checking the missingness pattern in BMI
+
+na.gender <- strokedata %>%
+  group_by(gender) %>%
+  summarise(na_count = sum(is.na(bmi)), total_count = n(), na_percentage = na_count / total_count * 100, .groups = 'drop')
+
+# Create the bar plot
+ggplot(na.gender, aes(x = gender, y = na_percentage, fill = gender)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Percentage of BMI Missingness by Gender",
+    x = "Gender",
+    y = "Percentage of Missing BMI Values (%)"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("lightblue", "darkblue", "orange")) +  # Customize colors
+  geom_text(aes(label = sprintf("%.2f%%", na_percentage)), vjust = -0.5) +
+  theme(legend.position = "none")  # Hide legend if only two genders
+
+na.hypertension <- strokedata %>%
+  group_by(hypertension) %>%
+  summarise(na_count = sum(is.na(bmi)), total_count = n(), na_percentage = na_count / total_count * 100, .groups = 'drop')
+
+# Create the bar plot
+ggplot(na.hypertension, aes(x = as.factor(hypertension), y = na_percentage, fill = hypertension)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Percentage of BMI Missingness by Hypertension",
+    x = "Gender",
+    y = "Percentage of Missing BMI Values (%)"
+  ) +
+  theme_minimal() +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  geom_text(aes(label = sprintf("%.2f%%", na_percentage)), vjust = -0.5)
+
+na.heart_disease <- strokedata %>%
+  group_by(heart_disease) %>%
+  summarise(na_count = sum(is.na(bmi)), total_count = n(), na_percentage = na_count / total_count * 100, .groups = 'drop')
+
+# Create the bar plot
+ggplot(na.heart_disease, aes(x = as.factor(heart_disease), y = na_percentage, fill = heart_disease)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Percentage of BMI Missingness by Heart Disease",
+    x = "Gender",
+    y = "Percentage of Missing BMI Values (%)"
+  ) +
+  theme_minimal() +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  geom_text(aes(label = sprintf("%.2f%%", na_percentage)), vjust = -0.5)
+
+na.stroke <- strokedata %>%
+  group_by(stroke) %>%
+  summarise(na_count = sum(is.na(bmi)), total_count = n(), na_percentage = na_count / total_count * 100, .groups = 'drop')
+
+# Create the bar plot
+ggplot(na.stroke, aes(x = stroke, y = na_percentage, fill = stroke)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Percentage of BMI Missingness by Stroke",
+    x = "Gender",
+    y = "Percentage of Missing BMI Values (%)"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("lightblue", "darkblue")) +  # Customize colors
+  geom_text(aes(label = sprintf("%.2f%%", na_percentage)), vjust = -0.5) +
+  theme(legend.position = "none")  # Hide legend if only two genders
+
+#do not need to generate more
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(grid)
+library(jpeg)
+library(png)
+require(gridExtra)
+gender <- rasterGrob(readPNG("C:/Users/temoo/OneDrive/Desktop/Uni/Year MPH 1/Stroke Prediction Project/gender.png"), interpolate=TRUE)
+hypertension <- rasterGrob(readPNG("C:/Users/temoo/OneDrive/Desktop/Uni/Year MPH 1/Stroke Prediction Project/hypertension.png"), interpolate=TRUE)
+# grid.arrange
+grid.arrange(gender, hypertension, ncol=2)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(grid)
+library(jpeg)
+library(png)
+require(gridExtra)
+heart <- rasterGrob(readPNG("C:/Users/temoo/OneDrive/Desktop/Uni/Year MPH 1/Stroke Prediction Project/heart.png"), interpolate=TRUE)
+stroke <- rasterGrob(readPNG("C:/Users/temoo/OneDrive/Desktop/Uni/Year MPH 1/Stroke Prediction Project/stroke.png"), interpolate=TRUE)
+# grid.arrange
+grid.arrange(heart, stroke, ncol=2)
+
+
+```
+<br>
+
+Visually, it appears that the BMI is not Missing Completely at Random (MCAR). 
+Rather, it seems that BMI missingness is associated with other variables, 
+such as heart disease, stroke, etc -> Missingness at Random (MAR).
+
+## Handling Missing Values
+
+Will conduct mean imputations for missingness in the BMI variable and drop the
+smoking status variable as explained above
+
+<br>
+```{r}
+
+#Removing the smoking status variable
+strokedata <- select(strokedata, -smoking_status)
+
+# Calculate the mean of 'var', ignoring NA values
+mean_value <- mean(strokedata$bmi, na.rm = TRUE)
+
+# Replace NA values with the mean
+strokedata$bmi[is.na(strokedata$bmi)] <- mean_value
+
+#Check if there is still missingness
+any(is.na(strokedata))
+
+```
+
+<br>
+
+The 'False' output indicates that there is no missingness in the data now.
+
+
+## Transforming all data to numeric variables
+
+<br>
+Many machine learning (ML) models require data to be numeric. In the
+next two steps, any data that is not numeric is converted.
+
+<br>
+```{r}
+#converting appropriate variables to numeric for later
+strokedata$gender <- as.numeric(strokedata$gender) 
+strokedata$hypertension <- as.numeric(strokedata$hypertension)
+strokedata$heart_disease <- as.numeric(strokedata$heart_disease)
+strokedata$ever_married <- as.numeric(strokedata$ever_married)
+```
+
+<br>
+
+Notice that Residence_type and work_type were not converted numerically.
+This is because these variables do not have an inherent order (i.e. they
+are not ordinal variables). To avoid ML models from interpreting
+information from these variables as ordinal data, one-hot encoding needs
+to take place to convert each categorical value to its own variable.
+
+
+## One-hot Encoding
+
+<br>
+
+```{r}
+
+# 1. One-hot encoding -work_type
+work_type_dummy <- dummyVars(" ~ work_type", data = strokedata, sep = "_")
+work_type_encoded <- predict(work_type_dummy, strokedata)
+# Add the encoded columns to original dataset
+strokedata <- cbind(strokedata, work_type_encoded)
+
+# 2. One-hot encoding -residence_type
+residence_type_dummy <- dummyVars(" ~ Residence_type", data = strokedata, sep = "_")
+residence_type_encoded <- predict(residence_type_dummy, strokedata)
+# Add the encoded columns to original dataset
+strokedata <- cbind(strokedata, residence_type_encoded)
+
+#Removing the parent work_type and Residence_type variables
+strokedata <- strokedata%>%
+  select(-work_type)
+strokedata <- strokedata%>%
+  select(-Residence_type)
+strokedata <- strokedata %>% 
+  rename(work_type_Self = `work_type_Self-employed`)
+```
+
+<br>
+
+Now all data is numerically converted which should be easier for some ML
+models to work with.
+<br>
+
+# Data Preparation for Modeling
+
+
+## Checking Class balance
+
+<br>
+In this next step, the distribution of the target variable, what the
+models will be predicting (i.e. stroke), will be determined. If there is
+a great deal of imbalance, the ML models will be biased towards
+predicting the majority class.
+<br>
+```{r}
+summary(strokedata$stroke)
+percentage_data <- strokedata %>%
+  group_by(stroke) %>%
+  summarise(percentage = n() / nrow(strokedata) * 100)
+
+ggplot(percentage_data, aes(x = stroke, y = percentage, fill = stroke)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Distribution of Stroke Cases",
+       x = "Stroke",
+       y = "Percentage (%)") +
+  theme_minimal()
+```
+
+<br>
+
+As displayed above, there is a substantial amount of imabalance. About
+95% of the participants did not have a stroke. The uneven distribution
+needs to be handled before ML models are run.
+
+
+## Balancing Class
+
+<br>
+In this next step, the majority class will be under-sampled and the
+minority class will be over-sampled to achieve an equal distribution in
+the variable. An advantage of this decision could be that the sample
+size remains the same, rather than increasing if only oversampling was
+utilized, which could potentially cause over-fitting. However, a
+disadvantage of this technique is that information from the majority
+class is lost.
+<br>
+
+```{R}
+stroke1 <- ovun.sample(stroke~., data=strokedata,
+                                 N=nrow(strokedata), p=0.5,
+                                 seed=1, method="both")$data
+
+#Visualizing if stroke is balanced
+barplot(table(stroke1$stroke))
+```
+<br>
+
+As seen from the graph above, the stroke variable is now balanced.
+
+
+## Splitting data 
+
+<br>
+```{r}
+# create a list of 80% of the rows in the dataset we can use for training
+test_index <- createDataPartition(stroke1$stroke, p=0.80, list=FALSE)
+# select 20% of the data for testing
+test1 <- stroke1[-test_index,]
+# use the remaining 80% of data to training and validating the models
+dataset1 <- stroke1[test_index,]
+```
+
+<br>
+
+In the analysis, multiple ML models will be generated and compared
+against each other. Some ML models prefer data to be normalized, and so to
+ensure comparability across all models, the same dataset will be
+normalized and used for each ML algorithm.
+
+
+## Data Normalization
+
+<br>
+In this step, min-max normalization is utilized (a common method in ML
+models). This technique scales data to a specific range, [0,1] in this
+case. As a lot of the variables in the dataset have a predefined range,
+this method is quite useful.
+<br>
+```{r}
+preprocessed_data1 <- preProcess(dataset1, method = 'range')
+transformed_data1 <- predict(preprocessed_data1, dataset1)
+
+preprocessed_data1.1 <- preProcess(test1, method = 'range')
+tvalidated_data1 <- predict(preprocessed_data1.1, test1)
+```
+<br>
+
+
+Note that the data normalization step was done now at this point, after splitting data
+into training and testing sets. This was done to avoid data leakage from the testing
+set to the training set, which could potentially result in
+over-optimistic results had normalization occurred before splitting the data.
+
+# Building Prediction Models 
+<br>
+To estimate the performance metrics, 10-fold cross-validation technique
+will be used which will also reduce over-fitting and result in a more robust
+evaluation than a train-validate-test split. This technique also both
+trains and validates. This process is repeated three times (i.e.
+repeated k-cross validation) with different splits of the data to get a
+more accurate estimate.
+
+
+In addition, the models are going to be evaluated by using the
+"Accuracy" metric. Accuracy is calculated as the ratio of correctly
+predicted instances to the total number of instances in the dataset,
+multiplied by 100 to express it as a percentage (e.g., 95% accuracy).
+This metric will be used to assess and compare the performance of each
+model.
+<br>
+```{r}
+# Running algorithms using repeated 10-fold cross validation
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+metric <- "Accuracy"
+
+# a) Generalized Linear Model
+set.seed(7)
+fit.glmnet <- train(stroke~., data=transformed_data1, method="glmnet", metric=metric, trControl=control)
+# CART
+fit.cart <- train(stroke~., data=transformed_data1, method="rpart", metric=metric, trControl=control)
+# b) nonlinear algorithms
+# kNN
+set.seed(7)
+fit.knn <- train(stroke~., data=transformed_data1, method="knn", metric=metric, trControl=control)
+# c) advanced algorithms
+# SVM
+set.seed(7)
+fit.svm <- train(stroke~., data=transformed_data1, method="svmRadial", metric=metric, trControl=control)
+# Random Forest
+set.seed(7)
+library(randomForest)
+fit.rf <- train(stroke~., data=transformed_data1, method="rf", metric=metric, trControl=control)
+
+```
+
+<br>
+
+
+# Model Selection
+
+<br>
+```{r}
+results <- resamples(list(glmnet=fit.glmnet, cart=fit.cart, knn=fit.knn, svm=fit.svm, rf=fit.rf))
+summary(results)
+dotplot(results)
+```
+
+<br>
+
+As seen from the visualizations above, the Random Forest technique has the greatest performance over the other ML algorithms. This algorithm will now be selected to make predictions (testing the algorithm on the test dataset generated earlier).
+
+
+# Random Forest Algorithm Assessment 
+
+
+## Performance
+<br>
+
+Running the RF algorithm on the test dataset to make predictions and determine its performance.
+<br>
+
+```{r}
+predictions <- predict(fit.rf, tvalidated_data1)
+confusionMatrix(predictions, tvalidated_data1$stroke)
+
+#Plotting an ROC Curve
+predictions <- predict(fit.rf, tvalidated_data1, type="prob")
+predicted_probabilities <- predictions[, "1"]
+library(pROC)
+roc_curve <- roc(tvalidated_data1$stroke, predicted_probabilities)
+plot(roc_curve, main="ROC Curve for Random Forest Model", legacy.axes=TRUE)
+```
+<br>
+
+
+As displayed, the model has a accuracy of 68.36%. The algorithm has a
+high sensitivity (0.9714), making it quite effective at correctly
+predicting True Positives (i.e. those who will have a stroke). However, on the 
+other hand, the model exhibits low specificity (0.3803), indicating that it is very 
+poor at correctly predicting those who will not have a stroke.
+
+
+## Feature Detection
+
+<br>
+This next step will determine which features were the most important in
+allowing the RF algorithm to make its predictions.
+<br>
+```{r}
+feature_importance <- varImp(fit.rf, scale = FALSE)$importance
+
+impFeatures_raw <- data.frame(
+  Feature = rownames(feature_importance),
+  Importance = feature_importance[, "Overall"]  # Adjust column name based on the output
+)
+
+# Normalize the importance scores
+impFeatures_raw <- impFeatures_raw %>%
+  mutate(
+    Normalized_Importance = Importance / sum(Importance)  # Normalize to sum to 1
+  ) %>%
+  arrange(desc(Normalized_Importance))
+
+# Print the normalized feature importance
+print(impFeatures_raw)
+
+#visualizing
+
+# Create the bar plot
+ggplot(impFeatures_raw, aes(x = reorder(Feature, Normalized_Importance), y = Normalized_Importance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +  # Flip coordinates for better readability
+  labs(
+    x = "Feature",
+    y = "Normalized Importance"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(size = 16, face = "bold")
+  )
+```
+
+<br>
+
+In order of importance, age, average glucose levels, and BMI were the most 
+influential features in the Random Forest model to predict stroke in subjects. 
+Taken together, these features play a significant role in the model's 
+decision-making process. 
+
+# R Environment and Session Information
+
+<br>
+```{r}
+sessionInfo()
+```
+
