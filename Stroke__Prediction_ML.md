@@ -4,6 +4,9 @@ date: "2024-07-27"
 output: 
   html_document: 
     keep_md: true
+    number_sections: true
+    toc: true
+    theme: journal
 author: "Temoor Tayyab"
 ---
 
@@ -15,7 +18,7 @@ This RMarkdown file contains the report of the data analysis done for
 the project on building and deploying a stroke prediction model in R. It
 contains analysis such as data exploration, summary statistics and
 building the prediction models. The final report was completed on
-Sat Jul 27 22:51:06 2024.
+Sat Jul 27 23:00:57 2024.
 <br>
 <br>
 
