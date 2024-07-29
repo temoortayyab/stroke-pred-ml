@@ -1,6 +1,6 @@
 ---
 title: "Stroke Prediction Using Machine Learning"
-date: "2024-07-27"
+date: "2024-07-28"
 output: 
   html_document: 
     keep_md: true
@@ -11,11 +11,11 @@ author: "Temoor Tayyab"
 
 **About Data Analysis Report**
 
-This RMarkdown file contains the report of the data analysis done for
+This file contains the report of the data analysis done for
 the project on building and deploying a stroke prediction model in R. It
 contains analysis such as data exploration, summary statistics and
 building the prediction models. The final report was completed on
-Sat Jul 27 23:13:50 2024.
+Sun Jul 28 23:27:24 2024.
 <br>
 <br>
 
